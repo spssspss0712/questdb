@@ -37,6 +37,7 @@ import io.questdb.mp.AbstractQueueConsumerJob;
 import io.questdb.mp.CountDownLatchSPI;
 import io.questdb.mp.Sequence;
 import io.questdb.std.DirectLongLongSortedList;
+import io.questdb.std.MemoryTracker;
 import io.questdb.tasks.GroupByLongTopKTask;
 import org.jetbrains.annotations.NotNull;
 
@@ -106,7 +107,7 @@ public class GroupByLongTopKJob extends AbstractQueueConsumerJob<GroupByLongTopK
         try {
             final int slotId = atom.maybeAcquire(workerId, owner, circuitBreaker);
             try {
-                if (circuitBreaker.checkIfTripped()) {
+                if (circuitBreaker.checkIfTrippedOrYield()) {
                     return;
                 }
                 final Map shard = atom.getDestShards().getQuick(shardIndex);
@@ -119,7 +120,11 @@ public class GroupByLongTopKJob extends AbstractQueueConsumerJob<GroupByLongTopK
             LOG.error().$("long top K on shard failed [error=").$(th).I$();
             circuitBreaker.cancel();
         } finally {
-            doneLatch.countDown();
+            try {
+                MemoryTracker.detachResourceMemoryCurrentThread();
+            } finally {
+                doneLatch.countDown();
+            }
         }
     }
 

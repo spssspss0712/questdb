@@ -27,7 +27,9 @@ package io.questdb.cairo.sql.async;
 import io.questdb.cairo.CairoException;
 import io.questdb.cairo.sql.SqlExecutionCircuitBreaker;
 import io.questdb.mp.continuation.CancellationBinding;
+import io.questdb.mp.continuation.Fiber;
 import io.questdb.mp.continuation.FiberCancellationSignal;
+import io.questdb.mp.continuation.FiberDispatchContext;
 import io.questdb.mp.continuation.FiberTask;
 import io.questdb.mp.continuation.SuspensionScope;
 import io.questdb.mp.continuation.TimerShards;
@@ -41,6 +43,7 @@ abstract class AbstractQueryParallelFiberTask extends FiberTask implements Quiet
     boolean pooled;
     private final CancellationBinding cancellationBinding = new CancellationBinding();
     private final QueryParallelFiberDispatcher dispatcher;
+    private FiberDispatchContext dispatchContext;
     private final QueryParallelFiberTaskPool<?> pool;
     private final TimerShards timerShards;
     private AsyncQueryProgressState progressState;
@@ -82,6 +85,7 @@ abstract class AbstractQueryParallelFiberTask extends FiberTask implements Quiet
 
     final void bindCancellation(SqlExecutionCircuitBreaker circuitBreaker) {
         circuitBreaker.copyCancelledFlagTo(cancellationBinding);
+        dispatchContext = Fiber.captureParallelDispatchContext();
     }
 
     final void bindProgress(AsyncQueryProgressState progressState) {
@@ -92,7 +96,13 @@ abstract class AbstractQueryParallelFiberTask extends FiberTask implements Quiet
     public void close() {
         clearBinding();
         cancellationBinding.clear();
+        dispatchContext = null;
         progressState = null;
+    }
+
+    @Nullable
+    final FiberDispatchContext getDispatchContext() {
+        return dispatchContext;
     }
 
     @Override
@@ -164,6 +174,7 @@ abstract class AbstractQueryParallelFiberTask extends FiberTask implements Quiet
     private void recycle() {
         clearBinding();
         cancellationBinding.clear();
+        dispatchContext = null;
         progressState = null;
         try {
             tryReopen();

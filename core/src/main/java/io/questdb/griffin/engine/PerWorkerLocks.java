@@ -211,7 +211,7 @@ public class PerWorkerLocks implements FiberSlotWaitQueue.SlotReleaser {
                 throw CairoException.nonCritical().put("reducer slot wait could not suspend the mounted fiber");
             }
             if (statefulCircuitBreaker != null) {
-                statefulCircuitBreaker.statefulThrowExceptionIfTripped();
+                statefulCircuitBreaker.statefulThrowExceptionIfTrippedOrYield();
             }
             throw CairoException.nonCritical().put("query aborted").setInterruption(true);
         }
@@ -311,7 +311,7 @@ public class PerWorkerLocks implements FiberSlotWaitQueue.SlotReleaser {
             @Nullable SqlExecutionCircuitBreaker statefulCircuitBreaker
     ) {
         if (statefulCircuitBreaker != null) {
-            statefulCircuitBreaker.statefulThrowExceptionIfTripped();
+            statefulCircuitBreaker.statefulThrowExceptionIfTrippedOrYield();
         } else if (circuitBreaker.checkIfTripped()) {
             throw CairoException.nonCritical().put("query aborted").setInterruption(true);
         }

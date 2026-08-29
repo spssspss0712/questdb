@@ -36,6 +36,7 @@ import io.questdb.mp.RingQueue;
 import io.questdb.mp.continuation.CancellationBinding;
 import io.questdb.mp.continuation.Fiber;
 import io.questdb.mp.continuation.FiberCancellationSignal;
+import io.questdb.mp.continuation.FiberDispatchContext;
 import io.questdb.mp.continuation.FiberEventWaitQueue;
 import io.questdb.mp.continuation.FiberRuntime;
 import io.questdb.mp.continuation.FiberRuntimeConfigurationListener;
@@ -156,12 +157,12 @@ public final class QueryParallelFiberDispatcher implements FiberRuntimeConfigura
         );
         return switch (reason) {
             case FiberWaitCoordinator.REASON_CANCEL -> {
-                circuitBreaker.statefulThrowExceptionIfTrippedNoThrottle();
+                circuitBreaker.statefulThrowExceptionIfTrippedNoThrottleOrYield();
                 yield true;
             }
             case FiberWaitCoordinator.REASON_PROGRESS -> true;
             case FiberWaitCoordinator.REASON_TIMER -> {
-                circuitBreaker.statefulThrowExceptionIfTrippedNoThrottle();
+                circuitBreaker.statefulThrowExceptionIfTrippedNoThrottleOrYield();
                 yield true;
             }
             case FiberWaitCoordinator.REASON_NONE, FiberWaitCoordinator.REASON_SHUTDOWN -> false;
@@ -807,9 +808,10 @@ public final class QueryParallelFiberDispatcher implements FiberRuntimeConfigura
             boolean directMountAllowed
     ) {
         final long taskIncarnation = task.getIncarnation();
+        final FiberDispatchContext dispatchContext = task.getDispatchContext();
         final LaunchResult result = directMountAllowed && !Fiber.isMounted()
-                ? runtime.launchReservedDirect(fiber, reservationEpoch, task, taskIncarnation)
-                : runtime.launchReserved(fiber, reservationEpoch, task, taskIncarnation);
+                ? runtime.launchReservedDirect(fiber, reservationEpoch, task, taskIncarnation, dispatchContext)
+                : runtime.launchReserved(fiber, reservationEpoch, task, taskIncarnation, dispatchContext);
         if (result != LaunchResult.LAUNCHED
                 && task.getIncarnation() == taskIncarnation
                 && task.isBound()) {

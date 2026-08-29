@@ -33,6 +33,7 @@ import io.questdb.cairo.sql.async.AsyncQueryProgressState;
 import io.questdb.griffin.engine.PerWorkerLocks;
 import io.questdb.mp.CountDownLatchSPI;
 import io.questdb.mp.Sequence;
+import io.questdb.std.MemoryTracker;
 import io.questdb.std.Mutable;
 import io.questdb.std.ObjList;
 import io.questdb.std.Rosti;
@@ -204,8 +205,8 @@ public class VectorAggregateEntry implements Mutable {
     ) {
         startedCounter.incrementAndGet();
 
-        if (circuitBreaker.checkIfTripped() || (oomCounter != null && oomCounter.get() > 0)) {
-            doneLatch.countDown();
+        if (circuitBreaker.checkIfTrippedOrYield() || (oomCounter != null && oomCounter.get() > 0)) {
+            complete(doneLatch);
             return;
         }
 
@@ -228,6 +229,14 @@ public class VectorAggregateEntry implements Mutable {
             aggregateError.setError(th);
             circuitBreaker.cancel();
             throw th;
+        } finally {
+            complete(doneLatch);
+        }
+    }
+
+    private static void complete(CountDownLatchSPI doneLatch) {
+        try {
+            MemoryTracker.detachResourceMemoryCurrentThread();
         } finally {
             doneLatch.countDown();
         }

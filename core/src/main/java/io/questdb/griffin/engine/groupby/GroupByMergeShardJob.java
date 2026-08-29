@@ -33,6 +33,7 @@ import io.questdb.log.LogFactory;
 import io.questdb.mp.AbstractQueueConsumerJob;
 import io.questdb.mp.CountDownLatchSPI;
 import io.questdb.mp.Sequence;
+import io.questdb.std.MemoryTracker;
 import io.questdb.tasks.GroupByMergeShardTask;
 import org.jetbrains.annotations.NotNull;
 
@@ -85,7 +86,7 @@ public class GroupByMergeShardJob extends AbstractQueueConsumerJob<GroupByMergeS
         try {
             final int slotId = ctx.maybeAcquire(carrierId, owner, circuitBreaker);
             try {
-                if (circuitBreaker.checkIfTripped()) {
+                if (circuitBreaker.checkIfTrippedOrYield()) {
                     return;
                 }
                 ctx.mergeShard(slotId, shardIndex);
@@ -96,7 +97,11 @@ public class GroupByMergeShardJob extends AbstractQueueConsumerJob<GroupByMergeS
             LOG.error().$("merge shard failed [error=").$(th).I$();
             circuitBreaker.cancel();
         } finally {
-            doneLatch.countDown();
+            try {
+                MemoryTracker.detachResourceMemoryCurrentThread();
+            } finally {
+                doneLatch.countDown();
+            }
         }
     }
 
